@@ -13,13 +13,13 @@
 #
 
 # 检查传入参数
-[ -z "$username" ] && write_log 14 "配置错误！保存阿里云API访问账号的'用户名'不能为空"
-[ -z "$password" ] && write_log 14 "配置错误！保存阿里云API访问密钥的'密码'不能为空"
+[ -z "$username" ] && write_log 14 "Aliyun API KEY ID can not empty"
+[ -z "$password" ] && write_log 14 "Aliyun API KEY Scriet can not empty"
 
 # 检查外部调用工具
-[ -n "$WGET_SSL" ] || write_log 13 "使用阿里云API需要 GNU Wget 支持，请先安装"
-command -v sed >/dev/null 2>&1 || write_log 13 "使用阿里云API需要 sed 支持，请先安装"
-command -v openssl >/dev/null 2>&1 || write_log 13 "使用阿里云API需要 openssl-util 支持，请先安装"
+#[ -n "$WGET_SSL" ] || write_log 13 "API need GNU Wget,install first "
+command -v sed >/dev/null 2>&1 || write_log 13 "API need sed , install set first"
+command -v openssl >/dev/null 2>&1 || write_log 13 "API need openssl-util, install first"
 
 # 包含用于解析 JSON 格式返回值的函数
 . /usr/share/libubox/jshn.sh
@@ -41,7 +41,8 @@ __DOMAIN="${domain#*@}"
 
 # 构造基本通信命令
 build_command() {
-	__CMDBASE="$WGET_SSL -nv -t 1 -O $DATFILE -o $ERRFILE"
+	__CMDBASE="wget -q -O $DATFILE"
+#   __CMDBASE="$WGET_SSL -nv -t 1 -O $DATFILE -o $ERRFILE"
 	# 绑定用于通信的主机/IP
 	if [ -n "$bind_network" ]; then
 		local bind_ip run_prog
@@ -85,6 +86,7 @@ aliyun_transfer() {
 
 		write_log 7 "#> $__RUNPROG"
 		eval $__RUNPROG
+# write_log 7 "$(cat "$DATFILE" 2> /dev/null)"
 		__ERR=$?
 		[ $__ERR -eq 0 ] && return 0
 
@@ -161,61 +163,64 @@ build_Request() {
 	string="Signature=$signature"; __URLARGS="$__URLARGS${__SEPARATOR}"$(percentEncode "${string%%=*}")"="$(percentEncode "${string#*=}")
 }
 
-# 添加解析记录
+# 添加Domain record
 add_domain() {
+	write_log 7 "start add new Domain record"
 	local value
-	aliyun_transfer "Action=AddDomainRecord" "DomainName=${__DOMAIN}" "RR=${__HOST}" "Type=${__TYPE}" "Value=${__IP}" || write_log 14 "服务器通信失败"
+	aliyun_transfer "Action=AddDomainRecord" "DomainName=${__DOMAIN}" "RR=${__HOST}" "Type=${__TYPE}" "Value=${__IP}" || write_log 14 "Send message to server fail"
 	json_cleanup; json_load "$(cat "$DATFILE" 2> /dev/null)" >/dev/null 2>&1
 	json_get_var value "RecordId"
-	[ -z "$value" ] && write_log 14 "添加新解析记录失败"
-	write_log 7 "添加新解析记录成功"
+	[ -z "$value" ] && write_log 14 "Add new Domain record fail"
+	write_log 7 "Add new Domain record successful"
 	return 0
 }
 
-# 修改解析记录
+# Modify Domain record
 update_domain() {
+	write_log 7 "start update Domain record"
 	local value
-	aliyun_transfer "Action=UpdateDomainRecord" "RecordId=${__RECID}" "RR=${__HOST}" "Type=${__TYPE}" "Value=${__IP}" || write_log 14 "服务器通信失败"
+	aliyun_transfer "Action=UpdateDomainRecord" "RecordId=${__RECID}" "RR=${__HOST}" "Type=${__TYPE}" "Value=${__IP}" || write_log 14 "Send message to server fail"
 	json_cleanup; json_load "$(cat "$DATFILE" 2> /dev/null)" >/dev/null 2>&1
 	json_get_var value "RecordId"
-	[ -z "$value" ] && write_log 14 "修改解析记录失败"
-	write_log 7 "修改解析记录成功"
+	[ -z "$value" ] && write_log 14 "Modify Domain recordfail"
+	write_log 7 "Modify Domain recordsuccessful"
 	return 0
 }
 
-# 启用解析记录
+# Enable Domain record
 enable_domain() {
+	write_log 7 "start enable Domain record"
 	local value
-	aliyun_transfer "Action=SetDomainRecordStatus" "RecordId=${__RECID}" "Status=Enable" || write_log 14 "服务器通信失败"
+	aliyun_transfer "Action=SetDomainRecordStatus" "RecordId=${__RECID}" "Status=Enable" || write_log 14 "Send message to server fail"
 	json_cleanup; json_load "$(cat "$DATFILE" 2> /dev/null)" >/dev/null 2>&1
 	json_get_var value "Status"
-	[ "$value" != "Enable" ] && write_log 14 "启用解析记录失败"
-	write_log 7 "启用解析记录成功"
+	[ "$value" != "Enable" ] && write_log 14 "Enable Domain recordfail"
+	write_log 7 "Enable Domain recordsuccessful"
 	return 0
 }
 
-# 获取子域名解析记录列表
+# 获取子域名Domain record列表
 describe_domain() {
 	local value type; local ret=0
-	aliyun_transfer "Action=DescribeSubDomainRecords" "SubDomain=${__HOST}.${__DOMAIN}" "Type=${__TYPE}" || write_log 14 "服务器通信失败"
+	aliyun_transfer "Action=DescribeSubDomainRecords" "SubDomain=${__HOST}.${__DOMAIN}" "Type=${__TYPE}" || write_log 14 "Send message to server fail"
 	json_cleanup; json_load "$(cat "$DATFILE" 2> /dev/null)" >/dev/null 2>&1
 	json_get_var value "TotalCount"
 	if [ $value -eq 0 ]; then
-		write_log 7 "解析记录不存在"
+		write_log 7 "Domain recordnot exist "
 		ret=1
 	else
 		json_select "DomainRecords" >/dev/null 2>&1
 		json_select "Record" >/dev/null 2>&1
 		json_select 1 >/dev/null 2>&1
 		json_get_var value "Locked"
-		[ $value -ne 0 ] && write_log 14 "解析记录被锁定"
+		[ $value -ne 0 ] && write_log 14 "Domain record is locked"
 		json_get_var __RECID "RecordId"
-		write_log 7 "获得解析记录ID: ${__RECID}"
+		write_log 7 "Retrieve Domain recordID: ${__RECID}"
 		json_get_var value "Status"
-		[ "$value" != "ENABLE" ] && ret=$(( $ret | 2 )) && write_log 7 "解析记录被禁用"
+		[ "$value" != "ENABLE" ] && ret=$(( $ret | 2 )) && write_log 7 "Domain record is disabled"
 		json_get_var type "Type"
 		json_get_var value "Value"
-		[ "$type" != "${__TYPE}" -o "$value" != "${__IP}" ] && ret=$(( $ret | 4 )) && write_log 7 "地址或类型需要修改"
+		[ "$type" != "${__TYPE}" -o "$value" != "${__IP}" ] && ret=$(( $ret | 4 )) && write_log 7 "IP changed, domain need update"
 	fi
 	return $ret
 }
@@ -223,6 +228,9 @@ describe_domain() {
 build_command
 describe_domain
 ret=$?
+if [ $ret -eq 0 ]; then
+	write_log 7 "Domain record not changed, update ignored"
+fi
 if [ $ret -eq 1 ]; then
 	sleep 3 && add_domain
 else
